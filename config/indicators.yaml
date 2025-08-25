@@ -45,7 +45,6 @@ indicators:
       imf_indicator: "GGXWDG_NGDP"
     normalization: {method: "linear_minmax", min: 20, max: 120, higher_is_riskier: true}
 
-  # ⚠️ Ersatz für depubliziertes GC.BAL.CASH.GD.ZS:
   - id: fiscal_balance_gdp
     name: "Net lending (+)/net borrowing (–), % of GDP"
     pillar: economy
@@ -137,7 +136,6 @@ indicators:
     source: {type: wgi, code: "RQ.EST"}
     normalization: {method: "wgi", higher_is_riskier: true}
 
-  # ⚠️ CO2 per capita: auf OWID umgestellt (World Bank Seite ist „no longer available“)
   - id: co2_per_capita
     name: "CO₂ emissions per capita (tCO2/person)"
     pillar: environment
@@ -159,16 +157,13 @@ indicators:
     source: {type: worldbank, code: "EN.ATM.PM25.MC.M3"}
     normalization: {method: "linear_minmax", min: 5, max: 80, higher_is_riskier: true}
 
+  # ⚠️ Umstellung: statt „Betroffene je 100k“ (via V/Pop) nehmen wir eine robuste fertige Pro-100k-Rate:
   - id: disasters_affected_per_100k
-    name: "Disaster impacts (affected per 100k pop)"
+    name: "Disaster impacts (deaths & missing per 100k, UNDRR)"
     pillar: environment
     group: disasters
-    source:
-      type: owid_percap
-      slug_value: "total-affected-by-natural-disasters"
-      slug_population: "population"
-      per: 100000
-    normalization: {method: "log_cap", cap: 5000, higher_is_riskier: true}
+    source: {type: owid, slug: "deaths-and-missing-persons-due-to-natural-disasters"}
+    normalization: {method: "log_cap", cap: 5, higher_is_riskier: true}
 
   - id: nd_gain
     name: "ND-GAIN Country Index (0..100, higher=better)"
