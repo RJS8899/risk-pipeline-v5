@@ -31,14 +31,16 @@ def fetch_wb_countries()->pd.DataFrame:
         rows = js[1]
         out=[]
         for x in rows:
+            iso3 = x.get("id")
+            if not iso3 or not isinstance(iso3, str) or len(iso3)!=3:
+                continue
             out.append({
-                "iso3": x.get("id"),
+                "iso3": iso3,
                 "name": x.get("name"),
                 "region": (x.get("region") or {}).get("value"),
                 "incomeLevel": (x.get("incomeLevel") or {}).get("value"),
             })
         df = pd.DataFrame(out)
-        df = df[df["iso3"].str.len()==3]
         return df.reset_index(drop=True)
     except Exception:
         return pd.DataFrame([
@@ -75,7 +77,7 @@ def source_fetch(ind: Dict[str,Any]) -> pd.DataFrame:
             df = fetch_vendor_csv("gpi_scores.csv")
             return df if not df.empty else pd.DataFrame(columns=["iso3","year","value"])
         if t=="worldbank_or_imf_weo":
-            # Robust: vorerst WB-Fallback (IMF WEO kann später ergänzt werden)
+            # robust: erstmal WB-Fallback
             return wb_fetch(s["wb_code_fallback"])
     except Exception:
         pass
@@ -272,6 +274,44 @@ def run_pipeline():
             "source_empty": bool(source_empty),
         }
 
+    # ---- Synthetischer ND-GAIN-Fallback (falls leer) ----
+    # Wir erzeugen einen 0..100 (höher = besser) Wert aus den anderen Environment-Indikatoren:
+    # synthetic_nd_gain_value = 100 - mean(norm(other_env_indicators))
+    # Danach bleibt die konfigurierte Normalisierung (invert_0_100) bestehen -> Risiko konsistent.
+    if "nd_gain" in raw_values:
+        all_nan = raw_values["nd_gain"].isna().all() if len(raw_values["nd_gain"])>0 else True
+        if all_nan:
+            # IDs der anderen Env-Indikatoren
+            env_ids = [ind["id"] for ind in cfg["indicators"]
+                       if ind["pillar"]=="environment" and ind["id"]!="nd_gain"]
+            if env_ids:
+                env_norm_df = pd.DataFrame({iid: norm_values[iid] for iid in env_ids})
+                env_risk_avg = env_norm_df.mean(axis=1, skipna=True)  # 0..100, höher = schlechter
+                synthetic_value = 100.0 - env_risk_avg  # 0..100, höher = besser (ND-GAIN-ähnlich)
+                # falls komplett leer (extrem unwahrscheinlich), leere Series schreiben
+                if synthetic_value.isna().all():
+                    synthetic_value = pd.Series(index=pd.Index(raw_values["nd_gain"].index, name=None), dtype=float)
+                # als "raw" für nd_gain setzen; Basis & Jahr kennzeichnen
+                raw_values["nd_gain"] = synthetic_value
+                # Normierung benutzen (invert_0_100) aus config
+                nd_spec = None
+                for ind in cfg["indicators"]:
+                    if ind["id"]=="nd_gain":
+                        nd_spec = {**cfg["defaults"]["normalization"], **ind.get("normalization",{})}
+                        break
+                if nd_spec is None:
+                    nd_spec = cfg["defaults"]["normalization"]
+                norm_values["nd_gain"] = normalize(synthetic_value, nd_spec)
+                basis_values["nd_gain"] = pd.Series(index=synthetic_value.index, data="synthetic", dtype=object)
+                # Jahr: max der beteiligten Env-Indikatoren pro Land
+                year_df = pd.DataFrame({iid: years_used.get(iid) for iid in env_ids})
+                years_used["nd_gain"] = year_df.max(axis=1)
+                # Meta aktualisieren
+                indicator_meta["nd_gain"]["coverage_share"] = float(synthetic_value.notna().mean())
+                bc = basis_values["nd_gain"].value_counts(dropna=False).to_dict()
+                indicator_meta["nd_gain"]["basis_counts"] = {str(k if pd.notna(k) else "missing"): int(v) for k,v in bc.items()}
+                indicator_meta["nd_gain"]["synthetic_fallback"] = True
+
     # ---- Aggregation: Gruppen, Pillars, Total (skipna mean) ----
     df_wide = pd.DataFrame({"iso3": iso_list}).set_index("iso3")
 
@@ -346,7 +386,7 @@ def run_pipeline():
     # Coverage-Zusammenfassung
     coverage_rows = []
     for iid, meta in indicator_meta.items():
-        coverage_rows.append({
+        row = {
             "indicator": iid,
             "coverage_share": meta["coverage_share"],
             "source_type": meta["source_type"],
@@ -354,8 +394,12 @@ def run_pipeline():
             "year_min": meta["year_min"],
             "year_max": meta["year_max"],
             "source_empty": meta["source_empty"],
-            **{f"basis_{k}": v for k,v in meta["basis_counts"].items()}
-        })
+        }
+        for k,v in meta.get("basis_counts", {}).items():
+            row[f"basis_{k}"] = v
+        if meta.get("synthetic_fallback"):
+            row["synthetic_fallback"] = True
+        coverage_rows.append(row)
     pd.DataFrame(coverage_rows).to_csv("out/coverage.csv", index=False)
 
     # META
@@ -366,6 +410,7 @@ def run_pipeline():
             "Nicht erreichbare/optionale Quellen werden neutral ausgelassen (skipna), Aggregation bleibt robust.",
             "Imputation: Lookback, dann Region/Income/Global (Median).",
             "Normalization: indikator-spezifisch, 0 (gut) .. 100 (schlecht).",
+            "ND-GAIN: Falls die Quelle leer ist, wird ein transparenter synthetischer Ersatzwert aus den übrigen Environment-Indikatoren gebildet (basis=synthetic)."
         ]
     }
     with open("out/meta.json","w",encoding="utf-8") as f:
