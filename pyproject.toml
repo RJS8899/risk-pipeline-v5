@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "risk-pipeline"
+version = "1.1.0"
+description = "Weekly country risk pipeline (robust, multi-source, imputation, normalized 0..100)"
+authors = [{ name="Your Team" }]
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.2.2",
+  "numpy>=1.26",
+  "pyyaml>=6.0.1",
+  "requests>=2.31.0",
+  "python-dateutil>=2.9.0.post0",
+  "openpyxl>=3.1.2",
+]
+
+[project.scripts]
+risk-pipeline = "risk_pipeline.cli:main"

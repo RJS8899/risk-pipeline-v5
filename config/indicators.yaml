@@ -1,0 +1,244 @@
+defaults:
+  lookback_years: 3
+  imputation:
+    order: [region, income, global]
+    region_field: "region"
+    income_field: "incomeLevel"
+  normalization:
+    method: "percentile_clamp"
+    p_low: 5
+    p_high: 95
+    higher_is_riskier: true
+
+pillars:
+  - id: economy
+    weight: 0.25
+  - id: institutions
+    weight: 0.25
+  - id: environment
+    weight: 0.25
+  - id: security
+    weight: 0.25
+
+indicators:
+  - id: inflation_yoy
+    name: "Inflation, consumer prices (% y/y)"
+    pillar: economy
+    group: macro
+    source: {type: worldbank, code: "FP.CPI.TOTL.ZG"}
+    normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
+
+  - id: real_gdp_growth_yoy
+    name: "Real GDP growth (% y/y)"
+    pillar: economy
+    group: macro
+    source: {type: worldbank, code: "NY.GDP.MKTP.KD.ZG"}
+    normalization: {method: "linear_minmax", min: -10, max: 10, higher_is_riskier: false}
+
+  - id: gen_gov_debt_gdp
+    name: "General government debt (% of GDP)"
+    pillar: economy
+    group: fiscal
+    source:
+      type: worldbank_or_imf_weo
+      wb_code_fallback: "GC.DOD.TOTL.GD.ZS"
+      imf_indicator: "GGXWDG_NGDP"
+    normalization: {method: "linear_minmax", min: 20, max: 120, higher_is_riskier: true}
+
+  - id: fiscal_balance_gdp
+    name: "Fiscal balance (% of GDP)"
+    pillar: economy
+    group: fiscal
+    source: {type: worldbank, code: "GC.BAL.CASH.GD.ZS"}
+    normalization: {method: "linear_minmax", min: -15, max: 5, higher_is_riskier: true, invert_sign: true}
+
+  - id: current_account_gdp
+    name: "Current account balance (% of GDP)"
+    pillar: economy
+    group: external
+    source: {type: worldbank, code: "BN.CAB.XOKA.GD.ZS"}
+    normalization: {method: "linear_minmax", min: -15, max: 10, higher_is_riskier: true, invert_sign: true}
+
+  - id: external_debt_gni
+    name: "External debt (% of GNI)"
+    pillar: economy
+    group: external
+    source: {type: worldbank, code: "DT.DOD.DECT.GN.ZS"}
+    normalization: {method: "linear_minmax", min: 10, max: 150, higher_is_riskier: true}
+
+  - id: reserves_months_imports
+    name: "Foreign reserves (months of imports)"
+    pillar: economy
+    group: external
+    source: {type: worldbank, code: "FI.RES.TOTL.MO"}
+    normalization: {method: "linear_minmax", min: 1, max: 12, higher_is_riskier: true, invert: true}
+
+  - id: short_term_debt_to_reserves
+    name: "Short-term external debt / reserves (%)"
+    pillar: economy
+    group: external
+    source: {type: worldbank, code: "DT.DOD.DSTC.IR.ZS"}
+    normalization: {method: "linear_minmax", min: 10, max: 300, higher_is_riskier: true}
+
+  - id: wgi_government_effectiveness
+    name: "Government Effectiveness (WGI)"
+    pillar: institutions
+    group: governance
+    source: {type: wgi, code: "GE.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: wgi_rule_of_law
+    name: "Rule of Law (WGI)"
+    pillar: institutions
+    group: governance
+    source: {type: wgi, code: "RL.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: wgi_control_corruption
+    name: "Control of Corruption (WGI)"
+    pillar: institutions
+    group: governance
+    source: {type: wgi, code: "CC.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: ti_cpi
+    name: "Corruption Perceptions Index (TI)"
+    pillar: institutions
+    group: governance
+    source: {type: owid, slug: "ti-corruption-perception-index"}
+    normalization: {method: "invert_0_100"}
+
+  - id: freedom_house_total
+    name: "Freedom House total score (0..100)"
+    pillar: institutions
+    group: civil_rights
+    source: {type: owid, slug: "freedom-score-fh"}
+    normalization: {method: "invert_0_100"}
+
+  - id: wgi_voice_accountability
+    name: "Voice & Accountability (WGI)"
+    pillar: institutions
+    group: civil_rights
+    source: {type: wgi, code: "VA.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: wgi_political_stability
+    name: "Political Stability (WGI)"
+    pillar: institutions
+    group: political_stability
+    source: {type: wgi, code: "PV.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: wgi_regulatory_quality
+    name: "Regulatory Quality (WGI)"
+    pillar: institutions
+    group: governance
+    source: {type: wgi, code: "RQ.EST"}
+    normalization: {method: "wgi", higher_is_riskier: true}
+
+  - id: co2_per_capita
+    name: "CO₂ emissions per capita (tCO2/person)"
+    pillar: environment
+    group: climate
+    source: {type: worldbank, code: "EN.ATM.CO2E.PC"}
+    normalization: {method: "log_cap", cap: 25, higher_is_riskier: true}
+
+  - id: ghg_excl_lulucf_pc
+    name: "GHG emissions excl. LULUCF (per capita)"
+    pillar: environment
+    group: climate
+    source: {type: owid, slug: "per-capita-ghg-excl-land-use"}
+    normalization: {method: "log_cap", cap: 30, higher_is_riskier: true}
+
+  - id: pm25_exposure
+    name: "PM2.5 mean exposure (µg/m³)"
+    pillar: environment
+    group: air_quality
+    source: {type: worldbank, code: "EN.ATM.PM25.MC.M3"}
+    normalization: {method: "linear_minmax", min: 5, max: 80, higher_is_riskier: true}
+
+  - id: disasters_affected_per_100k
+    name: "Disaster impacts (affected per 100k pop)"
+    pillar: environment
+    group: disasters
+    source:
+      type: owid_percap
+      slug_value: "total-affected-by-natural-disasters"
+      slug_population: "population"
+      per: 100000
+    normalization: {method: "log_cap", cap: 5000, higher_is_riskier: true}
+
+  - id: nd_gain
+    name: "ND-GAIN Country Index (0..100, higher=better)"
+    pillar: environment
+    group: resilience
+    source: {type: nd_gain}
+    normalization: {method: "invert_0_100"}
+
+  - id: conflict_death_rate_per_100k
+    name: "Battle-related deaths per 100k (UCDP)"
+    pillar: security
+    group: conflict
+    source: {type: owid, slug: "death-rate-in-armed-conflicts"}
+    normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
+
+  - id: acled_fatalities_per_100k
+    name: "ACLED fatalities per 100k"
+    pillar: security
+    group: conflict
+    source: {type: acled}
+    normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
+    optional: true
+
+  - id: terrorism_death_rate_per_100k
+    name: "Terrorism fatalities per 100k (GTD/OWID)"
+    pillar: security
+    group: conflict
+    source:
+      type: owid_percap
+      slug_value: "terrorism-deaths"
+      slug_population: "population"
+      per: 100000
+    normalization: {method: "log_cap", cap: 5, higher_is_riskier: true}
+
+  - id: homicide_rate_per_100k
+    name: "Intentional homicide rate (per 100k)"
+    pillar: security
+    group: crime
+    source: {type: owid, slug: "homicide-rate-unodc"}
+    normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
+
+  - id: refugees_origin_per_1k
+    name: "Refugees/asylum seekers from country (per 1,000 pop)"
+    pillar: security
+    group: displacement
+    source: {type: owid, slug: "number-of-refugees-per-100000"}
+    normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
+    transform: {scale: 0.01}
+
+  - id: idps_percent_pop
+    name: "Internally displaced persons (IDPs, % of pop)"
+    pillar: security
+    group: displacement
+    source:
+      type: owid_percap
+      slug_value: "internally-displaced-persons-from-disasters"
+      slug_population: "population"
+      per: 100
+    normalization: {method: "log_cap", cap: 5, higher_is_riskier: true}
+
+  - id: robbery_rate_per_100k
+    name: "Violent crime/robbery rate (per 100k)"
+    pillar: security
+    group: crime
+    source: {type: vendor_csv, filename: "unodc_robbery.csv"}
+    normalization: {method: "log_cap", cap: 300, higher_is_riskier: true}
+    optional: true
+
+  - id: gpi_score
+    name: "Global Peace Index (1..5, higher=worse)"
+    pillar: security
+    group: composite
+    source: {type: vendor_csv_or_gpi}
+    normalization: {method: "linear_minmax", min: 1.0, max: 5.0, higher_is_riskier: true}
+    optional: true
