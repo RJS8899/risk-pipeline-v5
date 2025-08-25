@@ -45,11 +45,12 @@ indicators:
       imf_indicator: "GGXWDG_NGDP"
     normalization: {method: "linear_minmax", min: 20, max: 120, higher_is_riskier: true}
 
+  # ⚠️ Ersatz für depubliziertes GC.BAL.CASH.GD.ZS:
   - id: fiscal_balance_gdp
-    name: "Fiscal balance (% of GDP)"
+    name: "Net lending (+)/net borrowing (–), % of GDP"
     pillar: economy
     group: fiscal
-    source: {type: worldbank, code: "GC.BAL.CASH.GD.ZS"}
+    source: {type: worldbank, code: "GC.NLD.TOTL.GD.ZS"}
     normalization: {method: "linear_minmax", min: -15, max: 5, higher_is_riskier: true, invert_sign: true}
 
   - id: current_account_gdp
@@ -136,11 +137,12 @@ indicators:
     source: {type: wgi, code: "RQ.EST"}
     normalization: {method: "wgi", higher_is_riskier: true}
 
+  # ⚠️ CO2 per capita: auf OWID umgestellt (World Bank Seite ist „no longer available“)
   - id: co2_per_capita
     name: "CO₂ emissions per capita (tCO2/person)"
     pillar: environment
     group: climate
-    source: {type: worldbank, code: "EN.ATM.CO2E.PC"}
+    source: {type: owid, slug: "co-emissions-per-capita"}
     normalization: {method: "log_cap", cap: 25, higher_is_riskier: true}
 
   - id: ghg_excl_lulucf_pc
