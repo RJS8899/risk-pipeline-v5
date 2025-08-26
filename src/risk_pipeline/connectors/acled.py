@@ -15,7 +15,6 @@ MAX_PAGES = 500
 BACKOFF_SEC = [2, 4, 8, 16]
 
 # Wie viele Jahre rückwirkend laden? (Default 8)
-# Du kannst das im Workflow setzen: ACLED_YEARS_BACK: 8
 YEARS_BACK = int(os.getenv("ACLED_YEARS_BACK", "8"))
 
 def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
@@ -95,14 +94,13 @@ def _asof_join_population_per_100k(fatal_df: pd.DataFrame, pop_df: pd.DataFrame,
 
 def fetch_acled_fatalities() -> pd.DataFrame:
     """
-    Holt ACLED-Ereignisse via OAuth, aggregiert fatalities je iso3/jahr
-    und gibt fatalities pro 100k zurück (iso3, year, value).
-    Lädt nur die letzten N Jahre (YEARS_BACK), um Laufzeit & Traffic zu reduzieren.
+    Holt ACLED-Ereignisse via OAuth, aggregiert fatalities je iso3/jahr,
+    gibt fatalities pro 100k zurück (iso3, year, value).
     Erwartete Secrets:
       - ACLED_USERNAME (oder ACLED_EMAIL)
       - ACLED_PASSWORD
     Optional:
-      - ACLED_YEARS_BACK (int)
+      - ACLED_YEARS_BACK (int), Default 8
     """
     username = os.getenv("ACLED_USERNAME") or os.getenv("ACLED_EMAIL")
     password = os.getenv("ACLED_PASSWORD")
@@ -115,7 +113,7 @@ def fetch_acled_fatalities() -> pd.DataFrame:
 
     headers = {"Authorization": f"Bearer {token}"}
     this_year = pd.Timestamp.utcnow().year
-    start_year = max(1997, this_year - YEARS_BACK)  # ACLED Startjahr 1997; wir begrenzen nach hinten
+    start_year = max(1997, this_year - YEARS_BACK)
 
     all_rows = []
     for year in range(start_year, this_year + 1):
@@ -139,7 +137,6 @@ def fetch_acled_fatalities() -> pd.DataFrame:
             if not data:
                 break
 
-            # zeilenweise light transform
             for row in data:
                 iso3 = row.get("iso3")
                 yr = row.get("year")
