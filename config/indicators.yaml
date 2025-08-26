@@ -21,6 +21,7 @@ pillars:
     weight: 0.25
 
 indicators:
+  # --- Economy ---
   - id: inflation_yoy
     name: "Inflation, consumer prices (% y/y)"
     pillar: economy
@@ -80,6 +81,7 @@ indicators:
     source: {type: worldbank, code: "DT.DOD.DSTC.IR.ZS"}
     normalization: {method: "linear_minmax", min: 10, max: 300, higher_is_riskier: true}
 
+  # --- Institutions ---
   - id: wgi_government_effectiveness
     name: "Government Effectiveness (WGI)"
     pillar: institutions
@@ -136,6 +138,7 @@ indicators:
     source: {type: wgi, code: "RQ.EST"}
     normalization: {method: "wgi", higher_is_riskier: true}
 
+  # --- Environment ---
   - id: co2_per_capita
     name: "CO₂ emissions per capita (tCO2/person)"
     pillar: environment
@@ -157,7 +160,6 @@ indicators:
     source: {type: worldbank, code: "EN.ATM.PM25.MC.M3"}
     normalization: {method: "linear_minmax", min: 5, max: 80, higher_is_riskier: true}
 
-  # ⚠️ Umstellung: statt „Betroffene je 100k“ (via V/Pop) nehmen wir eine robuste fertige Pro-100k-Rate:
   - id: disasters_affected_per_100k
     name: "Disaster impacts (deaths & missing per 100k, UNDRR)"
     pillar: environment
@@ -172,6 +174,7 @@ indicators:
     source: {type: nd_gain}
     normalization: {method: "invert_0_100"}
 
+  # --- Security ---
   - id: conflict_death_rate_per_100k
     name: "Battle-related deaths per 100k (UCDP)"
     pillar: security
@@ -185,7 +188,6 @@ indicators:
     group: conflict
     source: {type: acled}
     normalization: {method: "log_cap", cap: 50, higher_is_riskier: true}
-    optional: true
 
   - id: terrorism_death_rate_per_100k
     name: "Terrorism fatalities per 100k (GTD/OWID)"
@@ -224,18 +226,3 @@ indicators:
       per: 100
     normalization: {method: "log_cap", cap: 5, higher_is_riskier: true}
 
-  - id: robbery_rate_per_100k
-    name: "Violent crime/robbery rate (per 100k)"
-    pillar: security
-    group: crime
-    source: {type: vendor_csv, filename: "unodc_robbery.csv"}
-    normalization: {method: "log_cap", cap: 300, higher_is_riskier: true}
-    optional: true
-
-  - id: gpi_score
-    name: "Global Peace Index (1..5, higher=worse)"
-    pillar: security
-    group: composite
-    source: {type: vendor_csv_or_gpi}
-    normalization: {method: "linear_minmax", min: 1.0, max: 5.0, higher_is_riskier: true}
-    optional: true
