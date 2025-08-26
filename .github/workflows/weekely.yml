@@ -42,13 +42,12 @@ jobs:
           # ACLED (OAuth):
           ACLED_USERNAME: ${{ secrets.ACLED_USERNAME }}   # z.B. user@foreus.at
           ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}   # dein ACLED-Passwort
-          # Optional: wie viele Jahre rückwirkend ACLED laden (Default 8)
+          # optional: kleinere Ladezeit, lädt nur die letzten N Jahre (Default 8)
           ACLED_YEARS_BACK: "8"
 
-          # Optional: falls verfügbar – direkter ND-GAIN Download (CSV/XLSX/ZIP)
+          # optional: direkter ND-GAIN Download (CSV/XLSX/ZIP), falls vorhanden
           ND_GAIN_URL: ${{ secrets.ND_GAIN_URL }}
 
-          # Saubere Logs
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
