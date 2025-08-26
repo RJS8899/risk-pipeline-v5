@@ -5,9 +5,6 @@ import math
 import requests
 import pandas as pd
 
-# ---------------------------
-# ACLED OAuth + Read Endpoints
-# ---------------------------
 ACLED_TOKEN_URL = "https://acleddata.com/oauth/token"
 ACLED_READ_URL  = "https://acleddata.com/api/acled/read"
 
@@ -16,11 +13,9 @@ PAGE_LIMIT = 5000
 MAX_PAGES = 500
 BACKOFF_SEC = [2, 4, 8, 16]
 
-# Nur die letzten N Jahre laden (Performance). Default 8.
 YEARS_BACK = int(os.getenv("ACLED_YEARS_BACK", "8"))
 
 def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
-    """HTTP mit Backoff für 429/5xx/Cloudflare-Fehler."""
     headers = kwargs.pop("headers", {})
     headers.setdefault("Accept", "application/json")
     kwargs["headers"] = headers
@@ -41,13 +36,7 @@ def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
     raise RuntimeError("unreachable")
 
 def _get_access_token(username: str, password: str) -> str | None:
-    """OAuth Password Grant → Bearer Token (24h gültig)."""
-    data = {
-        "username": username,
-        "password": password,
-        "grant_type": "password",
-        "client_id": "acled",
-    }
+    data = {"username": username, "password": password, "grant_type": "password", "client_id": "acled"}
     try:
         resp = _request_with_backoff("POST", ACLED_TOKEN_URL, data=data)
         js = resp.json()
@@ -59,9 +48,6 @@ def _get_access_token(username: str, password: str) -> str | None:
         print("ACLED: OAuth-Fehler:", repr(e))
         return None
 
-# ---------------------------
-# Population (OWID) für Pro-Kopf-Berechnung
-# ---------------------------
 def _fetch_owid_population() -> pd.DataFrame:
     url = "https://ourworldindata.org/grapher/population.csv"
     try:
@@ -107,14 +93,10 @@ def _asof_join_population_per_100k(fatal_df: pd.DataFrame, pop_df: pd.DataFrame,
             rows.append({"iso3": iso, "year": y, "value": max(per_100k, 0.0)})
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["iso3","year","value"])
 
-# ---------------------------
-# ACLED Fetch
-# ---------------------------
 def fetch_acled_fatalities() -> pd.DataFrame:
     """
-    Holt ACLED-Events via OAuth (Bearer), aggregiert Fatalities je iso3/Jahr
-    und liefert Fatalities pro 100k (iso3, year, value).
-    Lädt nur die letzten N Jahre (Env ACLED_YEARS_BACK, Default 8).
+    ACLED via OAuth → Bearer; lädt nur die letzten N Jahre (YEARS_BACK, Default 8),
+    aggregiert Fatalities je iso3/Jahr und liefert Fatalities pro 100k.
     Erwartete Secrets:
       - ACLED_USERNAME (oder ACLED_EMAIL)
       - ACLED_PASSWORD
@@ -137,11 +119,9 @@ def fetch_acled_fatalities() -> pd.DataFrame:
     for year in range(start_year, this_year + 1):
         page = 1
         while page <= MAX_PAGES:
-            # Robust: per event_date-Jahresfenster filtern (keine year_where-Speziallogik)
             date_from = f"{year}-01-01"
             date_to   = f"{year}-12-31"
             params = {
-                # _format weglassen → JSON default, stabil
                 "event_date": f"{date_from}|{date_to}",
                 "limit": PAGE_LIMIT,
                 "page": page,
@@ -153,7 +133,6 @@ def fetch_acled_fatalities() -> pd.DataFrame:
                 print(f"ACLED: Fehler beim Lesen für {year}, page {page}: {repr(e)}")
                 break
 
-            # ACLED gibt bei Fehlern 'error' / 'message' zurück
             if isinstance(js, dict) and js.get("error"):
                 print("ACLED: API-Fehler:", js.get("error"))
                 break
@@ -165,7 +144,6 @@ def fetch_acled_fatalities() -> pd.DataFrame:
             for row in data:
                 iso3 = row.get("iso3")
                 fat  = row.get("fatalities")
-                # Jahr aus event_date robuster ermitteln (falls 'year' nicht geliefert wird)
                 ed   = row.get("event_date") or row.get("event_date2")
                 try:
                     yr = int(str(ed)[:4]) if ed else year
@@ -197,5 +175,3 @@ def fetch_acled_fatalities() -> pd.DataFrame:
         return pd.DataFrame(columns=["iso3","year","value"])
     out["value"] = pd.to_numeric(out["value"], errors="coerce").clip(lower=0)
     return out[["iso3","year","value"]]
-
-
