@@ -5,7 +5,9 @@ import math
 import requests
 import pandas as pd
 
-# ACLED OAuth + API
+# ---------------------------
+# ACLED OAuth + Read Endpoints
+# ---------------------------
 ACLED_TOKEN_URL = "https://acleddata.com/oauth/token"
 ACLED_READ_URL  = "https://acleddata.com/api/acled/read"
 
@@ -14,10 +16,14 @@ PAGE_LIMIT = 5000
 MAX_PAGES = 500
 BACKOFF_SEC = [2, 4, 8, 16]
 
-# Wie viele Jahre rückwirkend laden? (Default 8)
+# Nur die letzten N Jahre laden (Performance). Default 8.
 YEARS_BACK = int(os.getenv("ACLED_YEARS_BACK", "8"))
 
 def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
+    """HTTP mit Backoff für 429/5xx/Cloudflare-Fehler."""
+    headers = kwargs.pop("headers", {})
+    headers.setdefault("Accept", "application/json")
+    kwargs["headers"] = headers
     for i, wait in enumerate([0] + BACKOFF_SEC):
         if wait:
             time.sleep(wait)
@@ -35,6 +41,7 @@ def _request_with_backoff(method: str, url: str, **kwargs) -> requests.Response:
     raise RuntimeError("unreachable")
 
 def _get_access_token(username: str, password: str) -> str | None:
+    """OAuth Password Grant → Bearer Token (24h gültig)."""
     data = {
         "username": username,
         "password": password,
@@ -44,10 +51,17 @@ def _get_access_token(username: str, password: str) -> str | None:
     try:
         resp = _request_with_backoff("POST", ACLED_TOKEN_URL, data=data)
         js = resp.json()
-        return js.get("access_token")
-    except Exception:
+        token = js.get("access_token")
+        if not token:
+            print("ACLED: OAuth ohne access_token – Antwort:", js)
+        return token
+    except Exception as e:
+        print("ACLED: OAuth-Fehler:", repr(e))
         return None
 
+# ---------------------------
+# Population (OWID) für Pro-Kopf-Berechnung
+# ---------------------------
 def _fetch_owid_population() -> pd.DataFrame:
     url = "https://ourworldindata.org/grapher/population.csv"
     try:
@@ -63,7 +77,8 @@ def _fetch_owid_population() -> pd.DataFrame:
         out["year"] = out["year"].astype(int)
         out = out[out["iso3"].astype(str).str.len()==3]
         return out.reset_index(drop=True)
-    except Exception:
+    except Exception as e:
+        print("ACLED: Konnte OWID population nicht laden:", repr(e))
         return pd.DataFrame(columns=["iso3","year","pop"])
 
 def _asof_join_population_per_100k(fatal_df: pd.DataFrame, pop_df: pd.DataFrame, max_lag_years: int = 5) -> pd.DataFrame:
@@ -92,26 +107,29 @@ def _asof_join_population_per_100k(fatal_df: pd.DataFrame, pop_df: pd.DataFrame,
             rows.append({"iso3": iso, "year": y, "value": max(per_100k, 0.0)})
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["iso3","year","value"])
 
+# ---------------------------
+# ACLED Fetch
+# ---------------------------
 def fetch_acled_fatalities() -> pd.DataFrame:
     """
-    Holt ACLED-Ereignisse via OAuth, aggregiert fatalities je iso3/jahr,
-    gibt fatalities pro 100k zurück (iso3, year, value).
+    Holt ACLED-Events via OAuth (Bearer), aggregiert Fatalities je iso3/Jahr
+    und liefert Fatalities pro 100k (iso3, year, value).
+    Lädt nur die letzten N Jahre (Env ACLED_YEARS_BACK, Default 8).
     Erwartete Secrets:
       - ACLED_USERNAME (oder ACLED_EMAIL)
       - ACLED_PASSWORD
-    Optional:
-      - ACLED_YEARS_BACK (int), Default 8
     """
     username = os.getenv("ACLED_USERNAME") or os.getenv("ACLED_EMAIL")
     password = os.getenv("ACLED_PASSWORD")
     if not username or not password:
+        print("ACLED: Secrets fehlen (ACLED_USERNAME/ACLED_PASSWORD).")
         return pd.DataFrame(columns=["iso3", "year", "value"])
 
     token = _get_access_token(username, password)
     if not token:
         return pd.DataFrame(columns=["iso3", "year", "value"])
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-    headers = {"Authorization": f"Bearer {token}"}
     this_year = pd.Timestamp.utcnow().year
     start_year = max(1997, this_year - YEARS_BACK)
 
@@ -119,18 +137,25 @@ def fetch_acled_fatalities() -> pd.DataFrame:
     for year in range(start_year, this_year + 1):
         page = 1
         while page <= MAX_PAGES:
+            # Robust: per event_date-Jahresfenster filtern (keine year_where-Speziallogik)
+            date_from = f"{year}-01-01"
+            date_to   = f"{year}-12-31"
             params = {
-                "_format": "json",
-                "fields": "iso3|year|fatalities",
-                "year": str(year),
-                "year_where": "%3D",
+                # _format weglassen → JSON default, stabil
+                "event_date": f"{date_from}|{date_to}",
                 "limit": PAGE_LIMIT,
                 "page": page,
             }
             try:
                 resp = _request_with_backoff("GET", ACLED_READ_URL, headers=headers, params=params)
                 js = resp.json()
-            except Exception:
+            except Exception as e:
+                print(f"ACLED: Fehler beim Lesen für {year}, page {page}: {repr(e)}")
+                break
+
+            # ACLED gibt bei Fehlern 'error' / 'message' zurück
+            if isinstance(js, dict) and js.get("error"):
+                print("ACLED: API-Fehler:", js.get("error"))
                 break
 
             data = js.get("data", [])
@@ -139,13 +164,14 @@ def fetch_acled_fatalities() -> pd.DataFrame:
 
             for row in data:
                 iso3 = row.get("iso3")
-                yr = row.get("year")
-                fat = row.get("fatalities")
-                if not iso3 or not yr:
-                    continue
+                fat  = row.get("fatalities")
+                # Jahr aus event_date robuster ermitteln (falls 'year' nicht geliefert wird)
+                ed   = row.get("event_date") or row.get("event_date2")
                 try:
-                    yr = int(yr)
+                    yr = int(str(ed)[:4]) if ed else year
                 except Exception:
+                    yr = year
+                if not iso3:
                     continue
                 try:
                     fat = float(fat) if fat is not None else 0.0
@@ -158,6 +184,7 @@ def fetch_acled_fatalities() -> pd.DataFrame:
             page += 1
 
     if not all_rows:
+        print("ACLED: Keine Daten empfangen (prüfe Account-Rechte und Zeitraum).")
         return pd.DataFrame(columns=["iso3","year","value"])
 
     df = pd.DataFrame(all_rows)
