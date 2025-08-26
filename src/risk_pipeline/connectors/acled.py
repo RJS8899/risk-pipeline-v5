@@ -170,3 +170,4 @@ def fetch_acled_fatalities() -> pd.DataFrame:
         return pd.DataFrame(columns=["iso3","year","value"])
     out["value"] = pd.to_numeric(out["value"], errors="coerce").clip(lower=0)
     return out[["iso3","year","value"]]
+
