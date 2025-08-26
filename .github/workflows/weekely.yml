@@ -2,14 +2,20 @@ name: Weekly Risk Build
 
 on:
   schedule:
-    - cron: "0 2 * * 1"   # montags 02:00 UTC
+    - cron: "0 2 * * 1"   # jeden Montag 02:00 UTC
   workflow_dispatch:
+
+concurrency:
+  group: risk-pipeline-weekly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -33,18 +39,16 @@ jobs:
 
       - name: Run pipeline
         env:
-          # ACLED (neue OAuth-Variante):
+          # ACLED (OAuth):
           ACLED_USERNAME: ${{ secrets.ACLED_USERNAME }}   # z.B. user@foreus.at
           ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}   # dein ACLED-Passwort
+          # Optional: wie viele Jahre rückwirkend ACLED laden (Default 8)
+          ACLED_YEARS_BACK: "8"
 
-          # Optional: falls du noch den alten Key-basierten Connector im Repo hast,
-          # bleiben diese zwei Variablen als Fallback ohne zu stören:
-          ACLED_EMAIL:    ${{ secrets.ACLED_EMAIL }}
-          ACLED_KEY:      ${{ secrets.ACLED_KEY }}
+          # Optional: falls verfügbar – direkter ND-GAIN Download (CSV/XLSX/ZIP)
+          ND_GAIN_URL: ${{ secrets.ND_GAIN_URL }}
 
-          # Optional: direkter ND-GAIN Link (CSV/XLSX/ZIP), wenn ihr einen habt
-          ND_GAIN_URL:    ${{ secrets.ND_GAIN_URL }}
-
+          # Saubere Logs
           PYTHONUNBUFFERED: "1"
         run: |
           set -euo pipefail
@@ -55,6 +59,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: risk-outputs
+          retention-days: 14
           path: |
             out/risk_wide.csv
             out/risk_long.csv
